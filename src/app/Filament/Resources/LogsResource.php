@@ -1,0 +1,145 @@
+<?php
+
+namespace App\Filament\Resources;
+
+use App\Filament\Resources\LogsResource\Pages;
+use App\Filament\Resources\LogsResource\RelationManagers;
+use App\Models\Department;
+use App\Models\Logs;
+use App\Models\Trainer;
+use App\Models\Training;
+use App\Models\TrainingRequest;
+use Filament\Forms;
+use Filament\Forms\Components\Card;
+use Filament\Forms\Components\DateTimePicker;
+use Filament\Forms\Components\FileUpload;
+use Filament\Forms\Components\Select;
+use Filament\Resources\Form;
+use Filament\Resources\Resource;
+use Filament\Resources\Table;
+use Filament\Tables;
+use Filament\Tables\Columns\TextColumn;
+use Filament\Tables\Columns\ViewColumn;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\SoftDeletingScope;
+use Mohamedsabil83\FilamentFormsTinyeditor\Components\TinyEditor;
+
+class LogsResource extends Resource
+{
+    protected static ?string $model = TrainingRequest::class;
+
+    protected static ?string $navigationIcon = 'heroicon-o-collection';
+
+    protected static ?string $slug = 'logs';
+
+    protected static ?string $navigationLabel = 'Completed trainings';
+
+    protected static ?string $navigationGroup = 'Trainings';
+
+    protected static ?int $navigationSort = 6;
+
+    public static function form(Form $form): Form
+    {
+        return $form
+            ->schema([
+                Card::make()
+                    ->schema([
+                        Select::make('trainings')
+                            ->label('Training')
+                            ->options(Training::pluck('name', 'id'))
+                            ->disabled()
+                            ->multiple(),
+                        Select::make('department_ids')
+                            ->label('Department')
+                            ->options(Department::pluck('name','id'))
+                            ->multiple()
+                            ->disabled(),
+                    ])->columns(2),
+                Card::make()
+                    ->schema([
+                        TinyEditor::make('sub_topics')->label('Sub Topics')->disabled()
+                    ])->columns(1),
+                Card::make()
+                    ->schema([
+                        FileUpload::make('evidence')
+                        ->multiple()
+                        ->enableDownload()
+                        ->disk('public')
+                        ->disabled()
+                    ])->columns(1),
+                Card::make()
+                    ->schema([
+                        DateTimePicker::make('start_date'),
+                        DateTimePicker::make('end_date'),
+                        Select::make('specialists')
+                            ->label('Trainer')
+                            ->options(Trainer::pluck('name', 'id'))
+                            ->disabled()
+                            ->multiple(),
+                    ])->columns(3),
+                Card::make()
+                    ->schema([
+                        Select::make('training_rating')
+                                ->label('Training Rating')
+                                ->options([
+                                    '1' => 'Satisfactory',
+                                    '2' => 'Not Satisfactory',
+                                ])->disabled(),
+                        TinyEditor::make('rating_comment')->disabled(),
+                    ]),
+            ]);
+    }
+
+    public static function table(Table $table): Table
+    {
+        return $table
+            ->columns([
+                TextColumn::make('created_at')->label('Date Request'),
+                TextColumn::make('user.name')->label('Requested by'),
+                ViewColumn::make('Trainings')->view('tables.columns.training-name'),
+                Tables\Columns\BadgeColumn::make('status')
+                    ->colors([
+                        'primary' => 'completed',
+                    ]),
+                Tables\Columns\BadgeColumn::make('training_rating')
+                    ->enum([
+                        '1' => 'Satisfactory',
+                        '2' => 'Non Satisfactory',
+                    ])->color(fn (TrainingRequest $record): string => $record->training_rating == '1' ? 'primary' : 'danger'),
+            ])
+            ->filters([
+                //
+            ])
+            ->actions([
+                Tables\Actions\ViewAction::make()->color('primary'),
+                //Tables\Actions\EditAction::make(),
+                //Tables\Actions\DeleteAction::make(),
+            ])
+            ->bulkActions([
+                //Tables\Actions\DeleteBulkAction::make(),
+            ]);
+    }
+    
+    public static function getPages(): array
+    {
+        return [
+            'index' => Pages\ManageLogs::route('/'),
+            'view' => Pages\ViewLogs::route('/{record}'),
+        ];
+    }  
+
+    public static function getRelations(): array
+    {
+        return [
+            RelationManagers\TraineesRelationManager::class,
+        ];
+    }
+    
+    public static function getEloquentQuery(): Builder
+    {
+        return parent::getEloquentQuery()
+            ->with('trainings')
+            ->where('status','completed')
+            ->orderBy('created_at','Desc');
+    }
+}
